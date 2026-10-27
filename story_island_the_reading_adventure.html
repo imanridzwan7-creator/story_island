@@ -1,0 +1,852 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Story Island: The Reading Adventure</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        body { margin: 0; overflow: hidden; font-family: 'Inter', sans-serif; touch-action: none; background-color: #87CEEB; }
+        #game-canvas { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 1; }
+        .ui-layer { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 10; pointer-events: none; }
+        .interactive { pointer-events: auto; }
+        
+        /* Modals and Panels */
+        .modal { display: none; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(5px); pointer-events: auto; }
+        .modal.active { display: flex; }
+        
+        /* Mobile Joystick */
+        #joystick-zone { position: absolute; bottom: 20px; left: 20px; width: 120px; height: 120px; background: rgba(255,255,255,0.3); border-radius: 50%; display: none; }
+        #joystick-knob { position: absolute; top: 30px; left: 30px; width: 60px; height: 60px; background: rgba(255,255,255,0.7); border-radius: 50%; }
+        
+        @media (max-width: 768px) {
+            #joystick-zone { display: block; }
+        }
+
+        .challenge-btn { transition: transform 0.1s, background-color 0.2s; }
+        .challenge-btn:active { transform: scale(0.95); }
+        
+        /* Sequencing list */
+        .seq-item { display: flex; justify-content: space-between; align-items: center; padding: 10px; background: #f3f4f6; margin-bottom: 5px; border-radius: 8px; }
+        .seq-controls button { padding: 5px 10px; background: #e5e7eb; border-radius: 4px; margin-left: 5px; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <canvas id="game-canvas"></canvas>
+
+    <!-- UI Overlay Layer -->
+    <div class="ui-layer">
+        
+        <!-- HUD -->
+        <div id="hud" class="hidden interactive absolute top-4 left-4 right-4 flex justify-between items-start">
+            <div class="bg-white/80 p-3 rounded-xl shadow-lg border-2 border-blue-200">
+                <h2 id="hud-name" class="font-bold text-blue-800 text-lg">Explorer</h2>
+                <p class="text-sm text-gray-600">Stars: <span id="hud-stars" class="font-bold text-yellow-500">0/9</span></p>
+                <p class="text-sm text-gray-600">Crystals: <span id="hud-crystals" class="font-bold text-blue-500">0/3</span></p>
+            </div>
+            <button onclick="showMenu()" class="interactive bg-blue-500 text-white px-4 py-2 rounded-lg font-bold shadow hover:bg-blue-600">Menu</button>
+        </div>
+
+        <!-- Interaction Prompt -->
+        <div id="interaction-prompt" class="hidden interactive absolute bottom-32 left-1/2 transform -translate-x-1/2 flex flex-col items-center">
+            <button id="open-challenge-btn" class="bg-green-500 text-white px-8 py-4 rounded-full font-bold text-xl shadow-xl border-4 border-white animate-bounce hover:bg-green-600">
+                Open Challenge
+            </button>
+        </div>
+
+        <!-- Joystick (Mobile) -->
+        <div id="joystick-zone" class="interactive">
+            <div id="joystick-knob"></div>
+        </div>
+
+        <!-- Right Side Camera Zone (Mobile) -->
+        <div id="camera-zone" class="interactive absolute top-0 right-0 w-1/2 h-full hidden md:hidden"></div>
+    </div>
+
+    <!-- Modals Layer -->
+    <div class="ui-layer">
+
+        <!-- Welcome Screen -->
+        <div id="screen-welcome" class="modal active flex-col justify-center items-center h-full w-full bg-blue-50">
+            <h1 class="text-5xl font-extrabold text-blue-800 mb-4 text-center drop-shadow-md">Story Island<br><span class="text-3xl text-coral-500">The Reading Adventure</span></h1>
+            <p class="text-lg text-gray-700 mb-8 max-w-md text-center">Story Island needs your help! Read, explore and collect three magical Reading Crystals.</p>
+            
+            <input type="text" id="input-name" placeholder="Enter your name" class="px-4 py-3 rounded-xl border-2 border-blue-300 w-64 mb-4 text-center text-lg focus:outline-none focus:border-blue-500">
+            
+            <button onclick="startGame()" class="bg-yellow-400 text-blue-900 px-8 py-3 rounded-xl font-bold text-xl shadow-lg hover:bg-yellow-300 mb-4 w-64">Start Adventure</button>
+            <button onclick="toggleModal('screen-how-to')" class="bg-blue-200 text-blue-900 px-8 py-2 rounded-xl font-semibold shadow hover:bg-blue-300 mb-2 w-64">How to Play</button>
+            <button onclick="toggleModal('screen-teacher')" class="bg-gray-200 text-gray-800 px-8 py-2 rounded-xl font-semibold shadow hover:bg-gray-300 w-64">Teacher Corner</button>
+        </div>
+
+        <!-- How to Play -->
+        <div id="screen-how-to" class="modal flex-col justify-center items-center h-full w-full bg-black/50 p-4">
+            <div class="bg-white p-8 rounded-2xl max-w-md w-full shadow-2xl">
+                <h2 class="text-2xl font-bold text-blue-800 mb-4">How to Play</h2>
+                <ul class="list-disc pl-5 mb-6 text-gray-700 space-y-2">
+                    <li><strong>PC:</strong> Use W, A, S, D or Arrow Keys to move. Click and drag to look around.</li>
+                    <li><strong>Tablet/Phone:</strong> Use the left joystick to move and drag on the right side to look.</li>
+                    <li>Walk up to objects bouncing with markers.</li>
+                    <li>Read the stories carefully to solve the challenges and earn crystals!</li>
+                </ul>
+                <button onclick="toggleModal('screen-how-to')" class="bg-blue-500 text-white px-6 py-2 rounded-lg font-bold w-full">Got it!</button>
+            </div>
+        </div>
+
+        <!-- Teacher Corner -->
+        <div id="screen-teacher" class="modal flex-col justify-center items-center h-full w-full bg-black/50 p-4">
+            <div class="bg-white p-8 rounded-2xl max-w-lg w-full shadow-2xl max-h-screen overflow-y-auto">
+                <h2 class="text-2xl font-bold text-blue-800 mb-4">Teacher Corner</h2>
+                <div class="text-gray-700 space-y-3 mb-6 text-sm">
+                    <p><strong>Target group:</strong> Year 4 primary ESL pupils.</p>
+                    <p><strong>Main skill:</strong> Reading comprehension.</p>
+                    <p><strong>Learning Focus:</strong></p>
+                    <ul class="list-disc pl-5">
+                        <li>Level 1: Finding specific information.</li>
+                        <li>Level 2: Sequencing and vocabulary in context.</li>
+                        <li>Level 3: Making inferences and identifying main ideas.</li>
+                    </ul>
+                    <p><strong>Suggested use:</strong> Individual practice, pair work, or teacher-led activity.</p>
+                    <p><strong>Duration:</strong> ~15–25 minutes.</p>
+                    <p class="italic text-gray-500 border-t pt-2 mt-2">Note: Results are practice indicators, not a formal reading assessment.</p>
+                </div>
+                <div class="flex gap-4">
+                    <button onclick="resetGameProgress()" class="bg-red-500 text-white px-6 py-2 rounded-lg font-bold flex-1">Reset All Data</button>
+                    <button onclick="toggleModal('screen-teacher')" class="bg-blue-500 text-white px-6 py-2 rounded-lg font-bold flex-1">Close</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Reading & Challenge Panel -->
+        <div id="screen-challenge" class="modal flex-col justify-center items-center h-full w-full bg-black/60 p-2 md:p-6">
+            <div class="bg-white p-4 md:p-8 rounded-2xl max-w-4xl w-full shadow-2xl flex flex-col md:flex-row gap-6 max-h-[95vh] overflow-y-auto">
+                
+                <!-- Story Side -->
+                <div class="flex-1 bg-blue-50 p-4 rounded-xl border border-blue-100">
+                    <h3 class="font-bold text-blue-800 text-lg mb-2" id="reading-title">Story Title</h3>
+                    <div id="reading-text" class="text-gray-800 text-sm md:text-base leading-relaxed whitespace-pre-wrap"></div>
+                </div>
+
+                <!-- Question Side -->
+                <div class="flex-1 flex flex-col justify-center">
+                    <h3 id="question-text" class="font-bold text-xl text-gray-800 mb-4">Question goes here?</h3>
+                    
+                    <div id="answers-container" class="space-y-3 mb-6">
+                        <!-- Buttons injected via JS -->
+                    </div>
+
+                    <div id="sequencing-container" class="hidden flex-col gap-2 mb-6">
+                        <!-- List injected via JS -->
+                    </div>
+                    
+                    <div class="flex justify-between items-center mt-auto border-t pt-4">
+                        <button onclick="showHint()" class="text-blue-500 font-semibold hover:text-blue-700 underline text-sm">Need a Little Help?</button>
+                        <button onclick="closeChallenge()" class="bg-gray-300 text-gray-800 px-6 py-2 rounded-lg font-bold hover:bg-gray-400">Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Feedback Modal (Correct/Incorrect) -->
+        <div id="screen-feedback" class="modal flex-col justify-center items-center h-full w-full bg-black/40 p-4" style="z-index: 50;">
+            <div class="bg-white p-6 rounded-2xl max-w-sm w-full shadow-2xl text-center">
+                <h2 id="feedback-title" class="text-2xl font-bold mb-2">Result</h2>
+                <p id="feedback-message" class="text-gray-700 mb-6">Message goes here</p>
+                <button onclick="closeFeedback()" class="bg-blue-500 text-white px-8 py-2 rounded-lg font-bold w-full">OK</button>
+            </div>
+        </div>
+
+        <!-- Hint Modal -->
+        <div id="screen-hint" class="modal flex-col justify-center items-center h-full w-full bg-black/40 p-4" style="z-index: 50;">
+            <div class="bg-yellow-100 p-6 rounded-2xl max-w-sm w-full shadow-2xl border-2 border-yellow-400">
+                <h2 class="text-xl font-bold text-yellow-800 mb-2">Hint</h2>
+                <p id="hint-message" class="text-gray-800 mb-6">Hint goes here</p>
+                <button onclick="toggleModal('screen-hint')" class="bg-yellow-500 text-white px-8 py-2 rounded-lg font-bold w-full shadow">Got it</button>
+            </div>
+        </div>
+
+        <!-- Final Celebration -->
+        <div id="screen-celebration" class="modal flex-col justify-center items-center h-full w-full bg-blue-100 p-4 text-center">
+            <h1 class="text-5xl font-extrabold text-yellow-500 mb-2 drop-shadow-md">Congratulations!</h1>
+            <h2 id="celeb-name" class="text-3xl font-bold text-blue-800 mb-6">Story Island Reading Explorer</h2>
+            
+            <div class="bg-white p-6 rounded-2xl shadow-lg max-w-md w-full mb-8">
+                <p class="text-lg text-gray-700 mb-2">You restored all 3 Reading Crystals!</p>
+                <div class="flex justify-around my-4">
+                    <div class="text-center">
+                        <p class="text-sm text-gray-500">Stars Earned</p>
+                        <p class="text-2xl font-bold text-yellow-500" id="celeb-stars">9/9</p>
+                    </div>
+                    <div class="text-center">
+                        <p class="text-sm text-gray-500">1st Try Accuracy</p>
+                        <p class="text-2xl font-bold text-green-500" id="celeb-accuracy">100%</p>
+                    </div>
+                </div>
+                <div class="text-left text-sm text-gray-600 border-t pt-4">
+                    <p><strong>Skills Practiced:</strong></p>
+                    <ul class="list-disc pl-5">
+                        <li>Finding specific information.</li>
+                        <li>Sequencing events & vocabulary.</li>
+                        <li>Making inferences & main ideas.</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="flex gap-4">
+                <button onclick="location.reload()" class="bg-blue-500 text-white px-6 py-3 rounded-xl font-bold shadow-lg">Replay Adventure</button>
+            </div>
+        </div>
+
+    </div>
+
+<script>
+// --- GAME DATA & STATE ---
+const GAME_DATA = {
+    levels: [
+        {
+            id: 'l1', name: 'Level 1: Picnic Meadow', crystalName: 'Meadow Crystal', color: 0x88cc44,
+            text: "Hi, friends! Our picnic is on Saturday at ten o’clock. Meet me under the big mango tree beside the river. Please bring a water bottle and a hat. I will bring sandwiches. Ben will bring six red apples. If it rains, we will eat inside the village hall instead. See you soon! — Mia",
+            challenges: [
+                { id: 'c1_1', obj: 'Signpost', q: "Where should everyone meet if the weather is fine?", type: 'mcq', options: ["Inside the village hall", "Under the mango tree beside the river", "At Ben’s house"], correctIndex: 1, hint: "Look for the place mentioned right after the time.", feedback: "Great! Mia says to meet under the big mango tree." },
+                { id: 'c1_2', obj: 'Apple basket', q: "What will Ben bring?", type: 'mcq', options: ["Six red apples", "Sandwiches", "A water bottle"], correctIndex: 0, hint: "Find the sentence with Ben's name.", feedback: "Correct! The text says 'Ben will bring six red apples'." },
+                { id: 'c1_3', obj: 'Clock', q: "When does the picnic begin?", type: 'mcq', options: ["Sunday at ten o’clock", "Saturday at twelve o’clock", "Saturday at ten o’clock"], correctIndex: 2, hint: "Read the first sentence carefully.", feedback: "Spot on! The picnic is on Saturday at ten o'clock." }
+            ]
+        },
+        {
+            id: 'l2', name: 'Level 2: Lantern Forest', crystalName: 'Forest Crystal', color: 0x228b22,
+            text: "First, Sara found an empty glass jar in the kitchen. Next, she cut stars out of yellow paper and stuck them onto the jar. Then, she placed a small battery light inside. The jar began to glow. Finally, Sara carried her lantern to the woodland gate. The path was dim, so the light helped her see the stones. She walked slowly and reached the festival safely.",
+            challenges: [
+                { id: 'c2_1', obj: 'Paper Scroll', q: "Put the events in the correct order.", type: 'seq', sequence: ["Find an empty glass jar.", "Stick paper stars onto the jar.", "Put a battery light inside.", "Carry the lantern to the gate."], hint: "Look for transition words like First, Next, Then, Finally.", feedback: "Perfect! You sequenced the steps exactly as they happened." },
+                { id: 'c2_2', obj: 'Glowing lantern', q: "What does 'dim' mean in the story?", type: 'mcq', options: ["Very noisy", "Not very bright", "Full of people"], correctIndex: 1, hint: "Sara needed a light to help her see the stones. Why?", feedback: "Correct! 'Dim' means not very bright, which is why she needed the lantern." },
+                { id: 'c2_3', obj: 'Stepping stones', q: "What did Sara do immediately after decorating the jar?", type: 'mcq', options: ["She placed a battery light inside.", "She reached the festival.", "She found a jar in the kitchen."], correctIndex: 0, hint: "Find what she did 'Next' and what comes 'Then'.", feedback: "Yes! After sticking the stars, she placed a small battery light inside." }
+            ]
+        },
+        {
+            id: 'l3', name: 'Level 3: Lighthouse Lookout', crystalName: 'Lighthouse Crystal', color: 0xaaaaaa,
+            text: "Dark clouds covered the island. Amir hurried to the lighthouse, holding his jacket over his head. His shoes made wet marks on the floor. Inside, he found a little bird beside the open door. Its feathers were wet, and it was shaking. Amir put a dry towel in a box and gently placed the bird inside. He moved the box away from the wind. After a while, the bird stopped shaking. Amir smiled and sat quietly beside it.",
+            challenges: [
+                { id: 'c3_1', obj: 'Weather vane', q: "What was the weather probably like outside?", type: 'mcq', options: ["Hot and dry", "Rainy and windy", "Snowy and icy"], correctIndex: 1, hint: "Amir's shoes were wet, and he covered his head with a jacket.", feedback: "Correct! Wet marks, dark clouds, and wind suggest it was rainy and windy." },
+                { id: 'c3_2', obj: 'Bird shelter', q: "Which detail best shows that Amir is caring?", type: 'mcq', options: ["His shoes are wet.", "He holds his jacket over his head.", "He gently places the bird in a box with a dry towel."], correctIndex: 2, hint: "Look for an action where Amir helps someone or something else.", feedback: "Exactly! Providing a dry towel and gentle care shows he is caring." },
+                { id: 'c3_3', obj: 'Lighthouse book', q: "What is the main idea of the story?", type: 'mcq', options: ["Amir helps a bird shelter from a storm.", "Amir buys new shoes.", "Amir teaches a bird to fly."], correctIndex: 0, hint: "What is the most important event happening in this passage?", feedback: "Well done! The main focus is on Amir rescuing and sheltering the wet bird." }
+            ]
+        }
+    ]
+};
+
+let gameState = {
+    playerName: '',
+    completedChallenges: [], // Array of challenge IDs
+    firstAttempts: [], // Array of challenge IDs guessed right on first try
+    failedOnce: [], // Track if failed once for first attempt logic
+    unlockedLevels: 1 // 1, 2, or 3
+};
+
+// --- THREE.JS ENGINE SETUP ---
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x87CEEB); // Bright blue sky
+
+const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+const renderer = new THREE.WebGLRenderer({ antialias: true, canvas: document.getElementById('game-canvas') });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+
+// Lighting
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+scene.add(ambientLight);
+const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+dirLight.position.set(50, 100, 50);
+dirLight.castShadow = true;
+dirLight.shadow.camera.left = -50; dirLight.shadow.camera.right = 50;
+dirLight.shadow.camera.top = 50; dirLight.shadow.camera.bottom = -50;
+scene.add(dirLight);
+
+// Interactive Objects Registry
+const interactiveObjects = []; // { mesh, data: { levelIndex, challengeIndex } }
+
+// Materials
+const matWater = new THREE.MeshPhongMaterial({ color: 0x44aaff, flatShading: true });
+const matTrunk = new THREE.MeshPhongMaterial({ color: 0x8b4513 });
+const matLeaves = new THREE.MeshPhongMaterial({ color: 0x228b22 });
+const matHighlight = new THREE.MeshBasicMaterial({ color: 0xffff00, wireframe: true });
+
+// Build World
+function createWorld() {
+    // Water
+    const waterGeom = new THREE.PlaneGeometry(200, 200);
+    const water = new THREE.Mesh(waterGeom, matWater);
+    water.rotation.x = -Math.PI / 2;
+    water.position.y = -1;
+    scene.add(water);
+
+    // Island 1 (Meadow) - x: 0, z: 0
+    createIsland(0, 0, GAME_DATA.levels[0].color, 15);
+    createTree(2, 3); createTree(-4, -5); createTree(6, -2);
+    addInteractableObject(0, 0, 0, 0, 3, 0xff0000); // Signpost placeholder
+    addInteractableObject(0, 1, 0, -3, 3, 0xffa500); // Basket placeholder
+    addInteractableObject(0, 2, 4, 2, 3, 0x0000ff); // Clock placeholder
+
+    // Island 2 (Forest) - x: 30, z: -10
+    createIsland(30, -10, GAME_DATA.levels[1].color, 15);
+    createBridge(0, 0, 30, -10);
+    createTree(32, -8); createTree(28, -14); createTree(35, -12);
+    addInteractableObject(1, 0, 28, -8, 3, 0xdddddd); // Scroll
+    addInteractableObject(1, 1, 33, -7, 3, 0xffff00); // Lantern
+    addInteractableObject(1, 2, 30, -13, 3, 0x555555); // Stones
+
+    // Island 3 (Lighthouse) - x: 15, z: -35
+    createIsland(15, -35, GAME_DATA.levels[2].color, 18);
+    createBridge(30, -10, 15, -35);
+    // Lighthouse body
+    const lhGeom = new THREE.CylinderGeometry(2, 3, 10, 16);
+    const lhMat = new THREE.MeshPhongMaterial({ color: 0xffffff });
+    const lighthouse = new THREE.Mesh(lhGeom, lhMat);
+    lighthouse.position.set(15, 5, -38);
+    scene.add(lighthouse);
+    
+    addInteractableObject(2, 0, 12, -35, 3, 0xff00ff); // Vane
+    addInteractableObject(2, 1, 17, -33, 3, 0x00ffff); // Shelter
+    addInteractableObject(2, 2, 14, -31, 3, 0x884400); // Book
+}
+
+function createIsland(x, z, colorHex, radius) {
+    const geom = new THREE.CylinderGeometry(radius, radius+1, 2, 32);
+    const mat = new THREE.MeshPhongMaterial({ color: colorHex });
+    const island = new THREE.Mesh(geom, mat);
+    island.position.set(x, 0, z);
+    island.receiveShadow = true;
+    scene.add(island);
+}
+
+function createTree(x, z) {
+    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 3), matTrunk);
+    trunk.position.set(x, 1.5, z);
+    trunk.castShadow = true;
+    const leaves = new THREE.Mesh(new THREE.ConeGeometry(2, 4, 8), matLeaves);
+    leaves.position.set(x, 4, z);
+    leaves.castShadow = true;
+    scene.add(trunk); scene.add(leaves);
+}
+
+function createBridge(x1, z1, x2, z2) {
+    const length = Math.hypot(x2-x1, z2-z1);
+    const geom = new THREE.BoxGeometry(4, 0.5, length);
+    const mat = new THREE.MeshPhongMaterial({ color: 0x8b4513 });
+    const bridge = new THREE.Mesh(geom, mat);
+    bridge.position.set((x1+x2)/2, 0.5, (z1+z2)/2);
+    bridge.rotation.y = Math.atan2(x1-x2, z1-z2);
+    bridge.receiveShadow = true;
+    scene.add(bridge);
+}
+
+function addInteractableObject(lvlIdx, chalIdx, x, z, yOffset, colorHex) {
+    const geom = new THREE.BoxGeometry(1.5, 1.5, 1.5);
+    const mat = new THREE.MeshPhongMaterial({ color: colorHex });
+    const mesh = new THREE.Mesh(geom, mat);
+    mesh.position.set(x, yOffset, z);
+    mesh.castShadow = true;
+    
+    // Add floating marker
+    const markerGeom = new THREE.OctahedronGeometry(0.5);
+    const marker = new THREE.Mesh(markerGeom, new THREE.MeshBasicMaterial({color: 0xffff00}));
+    marker.position.y = 2;
+    mesh.add(marker);
+
+    scene.add(mesh);
+    interactiveObjects.push({ mesh, marker, data: { levelIndex: lvlIdx, challengeIndex: chalIdx }, startY: yOffset });
+}
+
+// Player
+const player = new THREE.Group();
+const bodyGeom = new THREE.CylinderGeometry(0.5, 0.5, 2, 16);
+const bodyMat = new THREE.MeshPhongMaterial({ color: 0xff3366 });
+const body = new THREE.Mesh(bodyGeom, bodyMat);
+body.position.y = 1;
+body.castShadow = true;
+player.add(body);
+player.position.set(0, 1, 5); // Start pos
+scene.add(player);
+
+// Camera rig
+const cameraRig = new THREE.Group();
+scene.add(cameraRig);
+cameraRig.add(camera);
+camera.position.set(0, 5, 8);
+camera.lookAt(0, 1, 0);
+
+// Input State
+var keys = { w: false, a: false, s: false, d: false };
+var joystickVector = { x: 0, y: 0 };
+var isGameActive = false;
+var isUIPaused = true;
+var currentNearbyChallenge = null;
+var activeChallengeData = null; // { levelIndex, challengeIndex }
+
+// Event Listeners
+window.addEventListener('keydown', e => {
+    if(!isGameActive || isUIPaused) return;
+    const k = e.key.toLowerCase();
+    if (k === 'w' || k === 'arrowup') keys.w = true;
+    if (k === 'a' || k === 'arrowleft') keys.a = true;
+    if (k === 's' || k === 'arrowdown') keys.s = true;
+    if (k === 'd' || k === 'arrowright') keys.d = true;
+});
+window.addEventListener('keyup', e => {
+    const k = e.key.toLowerCase();
+    if (k === 'w' || k === 'arrowup') keys.w = false;
+    if (k === 'a' || k === 'arrowleft') keys.a = false;
+    if (k === 's' || k === 'arrowdown') keys.s = false;
+    if (k === 'd' || k === 'arrowright') keys.d = false;
+});
+
+// Mobile Controls
+const joyZone = document.getElementById('joystick-zone');
+const joyKnob = document.getElementById('joystick-knob');
+let joyActive = false, joyCenter = {x:0, y:0};
+
+joyZone.addEventListener('touchstart', e => {
+    if(!isGameActive || isUIPaused) return;
+    e.preventDefault();
+    const touch = e.changedTouches[0];
+    const rect = joyZone.getBoundingClientRect();
+    joyCenter = { x: rect.left + rect.width/2, y: rect.top + rect.height/2 };
+    joyActive = true;
+    updateJoystick(touch);
+}, {passive: false});
+
+joyZone.addEventListener('touchmove', e => {
+    if(!joyActive) return;
+    e.preventDefault();
+    updateJoystick(e.changedTouches[0]);
+}, {passive: false});
+
+const endJoy = () => { joyActive = false; joystickVector = {x:0, y:0}; joyKnob.style.transform = `translate(0px, 0px)`; };
+joyZone.addEventListener('touchend', endJoy);
+joyZone.addEventListener('touchcancel', endJoy);
+
+function updateJoystick(touch) {
+    let dx = touch.clientX - joyCenter.x;
+    let dy = touch.clientY - joyCenter.y;
+    const maxDist = 30;
+    const dist = Math.hypot(dx, dy);
+    if(dist > maxDist) { dx = (dx/dist)*maxDist; dy = (dy/dist)*maxDist; }
+    joyKnob.style.transform = `translate(${dx}px, ${dy}px)`;
+    joystickVector = { x: dx/maxDist, y: dy/maxDist };
+}
+
+// Camera Drag (Mouse + Touch)
+let isDraggingCam = false;
+let prevMouseX = 0;
+let camAngle = 0; // rotate around player
+
+window.addEventListener('mousedown', e => { if(isGameActive && !isUIPaused && e.target.tagName==='CANVAS') { isDraggingCam = true; prevMouseX = e.clientX; }});
+window.addEventListener('mousemove', e => {
+    if(isDraggingCam) {
+        const delta = e.clientX - prevMouseX;
+        camAngle -= delta * 0.01;
+        prevMouseX = e.clientX;
+    }
+});
+window.addEventListener('mouseup', () => isDraggingCam = false);
+
+// Touch Camera
+const camZone = document.getElementById('camera-zone');
+let activeCamTouchId = null;
+camZone.addEventListener('touchstart', e => {
+    if(!isGameActive || isUIPaused) return;
+    e.preventDefault();
+    const touch = e.changedTouches[0];
+    activeCamTouchId = touch.identifier;
+    prevMouseX = touch.clientX;
+}, {passive: false});
+camZone.addEventListener('touchmove', e => {
+    if(activeCamTouchId === null) return;
+    e.preventDefault();
+    for(let i=0; i<e.changedTouches.length; i++) {
+        if(e.changedTouches[i].identifier === activeCamTouchId) {
+            const delta = e.changedTouches[i].clientX - prevMouseX;
+            camAngle -= delta * 0.01;
+            prevMouseX = e.changedTouches[i].clientX;
+        }
+    }
+}, {passive: false});
+const endCamDrag = (e) => {
+    for(let i=0; i<e.changedTouches.length; i++) {
+        if(e.changedTouches[i].identifier === activeCamTouchId) activeCamTouchId = null;
+    }
+};
+camZone.addEventListener('touchend', endCamDrag);
+camZone.addEventListener('touchcancel', endCamDrag);
+
+
+// Game Loop
+const clock = new THREE.Clock();
+function animate() {
+    requestAnimationFrame(animate);
+    const dt = Math.min(clock.getDelta(), 0.1);
+    const time = clock.getElapsedTime();
+
+    if (isGameActive && !isUIPaused) {
+        // Movement relative to camera angle
+        let inputX = joystickVector.x + (keys.d ? 1 : 0) - (keys.a ? 1 : 0);
+        let inputZ = joystickVector.y + (keys.s ? 1 : 0) - (keys.w ? 1 : 0);
+        
+        // Normalize
+        const len = Math.hypot(inputX, inputZ);
+        if(len > 1) { inputX /= len; inputZ /= len; }
+
+        const speed = 10;
+        const dir = new THREE.Vector3(inputX, 0, inputZ);
+        dir.applyAxisAngle(new THREE.Vector3(0,1,0), camAngle);
+
+        player.position.x += dir.x * speed * dt;
+        player.position.z += dir.z * speed * dt;
+
+        // Keep player above water/ground logic (simplified bounds)
+        player.position.y = 1;
+        if(player.position.x > 50) player.position.x = 50;
+        if(player.position.x < -20) player.position.x = -20;
+        if(player.position.z > 20) player.position.z = 20;
+        if(player.position.z < -60) player.position.z = -60;
+
+        // Rotate player to face movement
+        if(len > 0.1) {
+            player.rotation.y = Math.atan2(dir.x, dir.z);
+        }
+
+        // Camera follow
+        cameraRig.position.lerp(player.position, 0.1);
+        camera.position.x = Math.sin(camAngle) * 10;
+        camera.position.z = Math.cos(camAngle) * 10;
+        camera.lookAt(player.position.x, player.position.y + 1, player.position.z);
+
+        // Check Interactions
+        let closestObj = null;
+        let minDist = 4; // Interaction range
+
+        interactiveObjects.forEach(obj => {
+            // Animate object
+            obj.mesh.position.y = obj.startY + Math.sin(time * 2 + obj.mesh.position.x) * 0.2;
+            obj.mesh.rotation.y += dt;
+            
+            // Check completed status
+            const chalId = GAME_DATA.levels[obj.data.levelIndex].challenges[obj.data.challengeIndex].id;
+            const isCompleted = gameState.completedChallenges.includes(chalId);
+            const isLocked = obj.data.levelIndex + 1 > gameState.unlockedLevels;
+
+            if(isCompleted) {
+                obj.marker.material.color.setHex(0x00ff00); // Green if done
+            } else if (isLocked) {
+                obj.marker.material.color.setHex(0x555555); // Gray if locked
+            } else {
+                obj.marker.material.color.setHex(0xffff00); // Yellow if available
+                const dist = player.position.distanceTo(obj.mesh.position);
+                if (dist < minDist) {
+                    minDist = dist;
+                    closestObj = obj;
+                }
+            }
+        });
+
+        if (closestObj && currentNearbyChallenge !== closestObj) {
+            currentNearbyChallenge = closestObj;
+            document.getElementById('interaction-prompt').classList.remove('hidden');
+        } else if (!closestObj && currentNearbyChallenge) {
+            currentNearbyChallenge = null;
+            document.getElementById('interaction-prompt').classList.add('hidden');
+        }
+    }
+
+    renderer.render(scene, camera);
+}
+
+// Window resize
+window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// --- GAME LOGIC & UI ---
+
+function initGame() {
+    loadData();
+    createWorld();
+    animate();
+}
+
+function loadData() {
+    try {
+        const saved = localStorage.getItem('storyIslandData');
+        if (saved) {
+            const data = JSON.parse(saved);
+            gameState = { ...gameState, ...data };
+            document.getElementById('input-name').value = gameState.playerName;
+        }
+    } catch (e) { console.warn("Could not load save data"); }
+    updateHUD();
+}
+
+function saveData() {
+    try {
+        localStorage.setItem('storyIslandData', JSON.stringify(gameState));
+    } catch(e) { console.warn("Could not save data"); }
+}
+
+function resetGameProgress() {
+    if(confirm("Are you sure you want to delete all progress?")) {
+        localStorage.removeItem('storyIslandData');
+        location.reload();
+    }
+}
+
+function toggleModal(id) {
+    const modal = document.getElementById(id);
+    if(modal.classList.contains('active')) modal.classList.remove('active');
+    else modal.classList.add('active');
+}
+
+function showMenu() {
+    isUIPaused = true;
+    document.getElementById('screen-welcome').classList.add('active');
+    document.getElementById('hud').classList.add('hidden');
+}
+
+function startGame() {
+    const nameInput = document.getElementById('input-name').value.trim();
+    if(nameInput) gameState.playerName = nameInput;
+    else gameState.playerName = "Explorer";
+    
+    saveData();
+    updateHUD();
+    
+    document.querySelectorAll('.modal').forEach(m => m.classList.remove('active'));
+    document.getElementById('hud').classList.remove('hidden');
+    
+    isGameActive = true;
+    isUIPaused = false;
+    
+    // Reset keys to prevent sticking
+    keys.w = keys.a = keys.s = keys.d = false;
+}
+
+function updateHUD() {
+    document.getElementById('hud-name').innerText = gameState.playerName;
+    const totalStars = gameState.completedChallenges.length;
+    document.getElementById('hud-stars').innerText = `${totalStars}/9`;
+    document.getElementById('hud-crystals').innerText = `${gameState.unlockedLevels - 1}/3`;
+}
+
+// Interaction Button Click
+document.getElementById('open-challenge-btn').addEventListener('click', () => {
+    if(currentNearbyChallenge) {
+        openChallenge(currentNearbyChallenge.data.levelIndex, currentNearbyChallenge.data.challengeIndex);
+    }
+});
+
+let currentSeqOrder = [];
+
+function openChallenge(levelIdx, chalIdx) {
+    isUIPaused = true;
+    activeChallengeData = { levelIndex: levelIdx, challengeIndex: chalIdx };
+    const level = GAME_DATA.levels[levelIdx];
+    const challenge = level.challenges[chalIdx];
+
+    document.getElementById('interaction-prompt').classList.add('hidden');
+    document.getElementById('reading-title').innerText = level.name;
+    document.getElementById('reading-text').innerText = level.text;
+    document.getElementById('question-text').innerText = challenge.q;
+
+    const ansContainer = document.getElementById('answers-container');
+    const seqContainer = document.getElementById('sequencing-container');
+    
+    ansContainer.innerHTML = '';
+    seqContainer.innerHTML = '';
+
+    if (challenge.type === 'mcq') {
+        ansContainer.classList.remove('hidden');
+        seqContainer.classList.add('hidden');
+        
+        challenge.options.forEach((opt, idx) => {
+            const btn = document.createElement('button');
+            btn.className = 'challenge-btn w-full text-left bg-blue-100 hover:bg-blue-200 text-blue-900 border border-blue-300 p-4 rounded-xl font-medium shadow-sm';
+            btn.innerText = opt;
+            btn.onclick = () => submitAnswer(idx);
+            ansContainer.appendChild(btn);
+        });
+    } else if (challenge.type === 'seq') {
+        ansContainer.classList.add('hidden');
+        seqContainer.classList.remove('hidden');
+        seqContainer.classList.add('flex');
+        
+        // Copy and shuffle slightly for initial state
+        currentSeqOrder = [...challenge.sequence];
+        // simple derangement
+        currentSeqOrder.push(currentSeqOrder.shift());
+        
+        renderSequencingList();
+
+        const submitBtn = document.createElement('button');
+        submitBtn.className = 'challenge-btn w-full bg-green-500 hover:bg-green-600 text-white p-3 rounded-xl font-bold shadow mt-2';
+        submitBtn.innerText = "Check Answer";
+        submitBtn.onclick = () => submitSeqAnswer();
+        seqContainer.appendChild(submitBtn);
+    }
+
+    document.getElementById('screen-challenge').classList.add('active');
+}
+
+function renderSequencingList() {
+    const container = document.getElementById('sequencing-container');
+    // Remove existing items but keep submit button
+    Array.from(container.children).forEach(c => {
+        if(c.tagName !== 'BUTTON') c.remove();
+    });
+
+    currentSeqOrder.forEach((item, idx) => {
+        const div = document.createElement('div');
+        div.className = 'seq-item text-sm md:text-base border border-gray-200';
+        
+        const textSpan = document.createElement('span');
+        textSpan.innerText = item;
+        textSpan.className = "flex-1 pr-2";
+        
+        const controls = document.createElement('div');
+        controls.className = 'seq-controls flex';
+        
+        const upBtn = document.createElement('button');
+        upBtn.innerHTML = '&#9650;';
+        upBtn.onclick = () => moveSeq(idx, -1);
+        if(idx === 0) upBtn.disabled = true;
+
+        const downBtn = document.createElement('button');
+        downBtn.innerHTML = '&#9660;';
+        downBtn.onclick = () => moveSeq(idx, 1);
+        if(idx === currentSeqOrder.length - 1) downBtn.disabled = true;
+
+        controls.appendChild(upBtn);
+        controls.appendChild(downBtn);
+        div.appendChild(textSpan);
+        div.appendChild(controls);
+        
+        container.insertBefore(div, container.lastChild); // insert before submit btn
+    });
+}
+
+function moveSeq(idx, dir) {
+    if (idx + dir < 0 || idx + dir >= currentSeqOrder.length) return;
+    const temp = currentSeqOrder[idx];
+    currentSeqOrder[idx] = currentSeqOrder[idx+dir];
+    currentSeqOrder[idx+dir] = temp;
+    renderSequencingList();
+}
+
+function showHint() {
+    if(!activeChallengeData) return;
+    const chal = GAME_DATA.levels[activeChallengeData.levelIndex].challenges[activeChallengeData.challengeIndex];
+    document.getElementById('hint-message').innerText = chal.hint;
+    document.getElementById('screen-hint').classList.add('active');
+}
+
+function closeChallenge() {
+    document.getElementById('screen-challenge').classList.remove('active');
+    isUIPaused = false;
+    activeChallengeData = null;
+}
+
+function submitAnswer(idx) {
+    const level = GAME_DATA.levels[activeChallengeData.levelIndex];
+    const chal = level.challenges[activeChallengeData.challengeIndex];
+    handleAnswerResult(idx === chal.correctIndex, chal);
+}
+
+function submitSeqAnswer() {
+    const level = GAME_DATA.levels[activeChallengeData.levelIndex];
+    const chal = level.challenges[activeChallengeData.challengeIndex];
+    
+    let isCorrect = true;
+    for(let i=0; i<chal.sequence.length; i++){
+        if(chal.sequence[i] !== currentSeqOrder[i]) isCorrect = false;
+    }
+    handleAnswerResult(isCorrect, chal);
+}
+
+function handleAnswerResult(isCorrect, chal) {
+    const title = document.getElementById('feedback-title');
+    const msg = document.getElementById('feedback-message');
+    
+    if (isCorrect) {
+        title.innerText = "Excellent!";
+        title.className = "text-2xl font-bold mb-2 text-green-600";
+        msg.innerText = chal.feedback;
+        
+        if (!gameState.failedOnce.includes(chal.id) && !gameState.completedChallenges.includes(chal.id)) {
+            gameState.firstAttempts.push(chal.id);
+        }
+        
+        if (!gameState.completedChallenges.includes(chal.id)) {
+            gameState.completedChallenges.push(chal.id);
+            checkLevelProgress(activeChallengeData.levelIndex);
+        }
+        
+        saveData();
+        updateHUD();
+        
+        // Hide challenge screen immediately on success
+        document.getElementById('screen-challenge').classList.remove('active');
+    } else {
+        title.innerText = "Keep Trying!";
+        title.className = "text-2xl font-bold mb-2 text-red-600";
+        msg.innerText = "Good try! Read the highlighted part and have another go.";
+        if (!gameState.failedOnce.includes(chal.id)) {
+            gameState.failedOnce.push(chal.id);
+        }
+    }
+    
+    document.getElementById('screen-feedback').classList.add('active');
+}
+
+function closeFeedback() {
+    document.getElementById('screen-feedback').classList.remove('active');
+    // If correct, we also closed challenge screen, so resume game.
+    // If incorrect, challenge screen is still open.
+    if (!document.getElementById('screen-challenge').classList.contains('active')) {
+        isUIPaused = false;
+        activeChallengeData = null;
+    }
+}
+
+function checkLevelProgress(levelIdx) {
+    const level = GAME_DATA.levels[levelIdx];
+    let allDone = true;
+    level.challenges.forEach(c => {
+        if(!gameState.completedChallenges.includes(c.id)) allDone = false;
+    });
+
+    if(allDone) {
+        if (gameState.unlockedLevels === levelIdx + 1) {
+            gameState.unlockedLevels++;
+            if(gameState.unlockedLevels > 3) {
+                setTimeout(showFinalCelebration, 1000);
+            }
+        }
+    }
+}
+
+function showFinalCelebration() {
+    isUIPaused = true;
+    document.getElementById('celeb-name').innerText = gameState.playerName + ", Story Island Reading Explorer!";
+    document.getElementById('celeb-stars').innerText = `${gameState.completedChallenges.length}/9`;
+    
+    const accuracy = Math.round((gameState.firstAttempts.length / 9) * 100);
+    document.getElementById('celeb-accuracy').innerText = `${accuracy}%`;
+    
+    document.getElementById('screen-celebration').classList.add('active');
+}
+
+// Start everything when load is complete
+window.onload = initGame;
+
+</script>
+</body>
+</html>
